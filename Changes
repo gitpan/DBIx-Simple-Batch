@@ -1,0 +1,33 @@
+Revision history for DBIx-Simple-Batch (formerly DBIx::Simple::Procedure)
+
+0.01    Date/time
+        First version, released on an unsuspecting world.
+1.30    08/21/2009 10:27 PM EST
+        Added validif command, a synonym for the proceed command
+        Fixed how the proceed command handles empty placeholders
+        Fixed the declare command to append custom parameters instead of overwriting
+        Added the examine command to aid in debugging procedures, the examine command errors out with the passed statement
+        Create a standardized error message via the _error routine
+        Fixed cursor counter
+        Fixed processor method, was ignoring statement with multiple placeholders
+1.40    08/23/2009 6:14 PM EST
+        Fixed proceed command and its synonyms validif and ifvalid
+        Added setting command to instruct the module on how to handle blank parameters
+        Added the ability to pass a hashref to be processed
+1.57    08/24/2009 11:16 PM EST
+        Included better documentation
+        The include command now passes existing custom parameters
+        Fixed the clear command to include re-initializing the resultsets, the queue, etc
+1.60    08/28/2009 7:40 PM EST
+        Fixed/Added documentation
+        Add access to perl's evaluation function via the [! perl -e] command
+        Fixed installer to include DBIx::Simple
+1.61    09/01/2009 9:17AM EST
+        Fixed a few common installation issues
+1.62    09/10/2009 1:12PM EST
+        Fixed test.pl, prompts for credentials during installation
+1.63    10/01/2009 1:02PM EST
+        Add multi-line SQL support
+        Fixed error output
+        Added named resultsets
+        Started DBIx::Simple::Batch
