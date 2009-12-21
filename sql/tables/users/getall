@@ -21,4 +21,5 @@
 
 }
 
+! setname group
 ! capture select * from `group`

@@ -10,11 +10,11 @@ DBIx::Simple::Batch - An Alternative To SQL Stored Procedures using DBIx::Simple
 
 =head1 VERSION
 
-Version 1.63
+Version 1.64
 
 =cut
 
-our $VERSION = '1.63';
+our $VERSION = '1.64';
 our @properties = caller();
 
 =head1 SYNOPSIS
@@ -290,13 +290,13 @@ sub _load_commands {
         my ($statement, @parameters) = @_;
         $self->{processing}->{resultset} = $self->_execute_query($statement, @parameters);
         $self->{sets}->[@{$self->{sets}}] = $self->{processing}->{resultset}->hashes;
-        # store resultset names
-        my $name = lc $statement;
-        $name =~ s/.*\sfrom\s\`?([a-zA-Z\d\_\.\-]+)\`?.*/$1/;
-        $name =~ s/[^a-zA-Z0-9]/\_/g;
-        $name = "command" if !$name;
-        my $count = grep { /$name/ } keys %{$self->{set_names}};
-        $self->{set_names}->{$name . ( $count ? "_$count" : "" )} = $self->{sets}->[(@{$self->{sets}})-1];
+        
+        # store resultset via name
+        $self->{set_names}->{$self->{processing}->{set_name}} =
+            $self->{sets}->[(@{$self->{sets}})-1]
+                if $self->{processing}->{set_name};
+        $self->{processing}->{set_name} = ''
+            if $self->{processing}->{set_name};
     };
     
     #! execute: execute sql commands only, nothing else, nothing fancy
@@ -387,6 +387,12 @@ sub _load_commands {
         $self->{settings}->{blank} = '0' if (lc($statement) eq 'blank as zero');
         $self->{settings}->{blank} = '' if (lc($statement) eq 'blank as blank');
         $self->{settings}->{blank} = 'NULL' if (lc($statement) eq 'blank as null');
+    };
+    
+    #! setname: configures how the module handles blank parameters
+    $self->{commands}->{setname} = sub {
+        my ($statement, @parameters) = @_;
+        $self->{processing}->{set_name} = $statement if $statement;
     };
     
     #! perl -e: provides access to perl's eval function
@@ -666,15 +672,17 @@ index or name passed to it or an empty arrayref.
 
 sub cache {
     my ($self, $index) = @_;
-    if ($self->{set_names}->{$index}) {
-        return $self->{set_names}->{$index};
-    }
-    elsif ($index =~ /^\d+$/) {
+    if ($index =~ /^\d+$/) {
         if ($self->{sets}->[$index]) {
             return $self->{sets}->[$index];
         }
     }
-    return [];
+    else {
+        if ($self->{set_names}->{$index}) {
+            return $self->{set_names}->{$index};
+        }
+    }
+    return 0;
 }
 
 =head2 rs
