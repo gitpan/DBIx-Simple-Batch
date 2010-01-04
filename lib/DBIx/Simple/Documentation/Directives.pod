@@ -1,0 +1,224 @@
+=head1 NAME
+
+DBIx::Simple::Batch::Documentation::Directives
+
+=head1 DESCRIPTION
+
+The power behind L<DBIx::Simple::Batch> lies in the sql files and their commands. Each  commands will contain a single directive which instructs the sql file processor to perform some function. Commands are processed in the order in which they appear in the sql file. The document will explain each directive and provide an example of its usage.
+
+=head1 SYNOPSIS
+
+The sql file to be processed may contain any text you desire, e.g. comments and other markup. L<DBIx::Simple::Batch> only reacts to command lines (commands). These instructions (or commands) must be placed on its own line and be prefixed with an exclamation point, a space, the command, another space, and the statement to be evaluated.
+
+e.g. 
+! execute select * from foo
+! execute {
+     select * from foo
+}
+
+Multiple commands can be used in a single sql file. Multi-line commands are supported but its statements must be enclosed with `{}` curly brackets having the closing bracket appear on its own line as the first character. 
+
+=head1 DIRECTIVES
+
+The following is a list of available directive, their usage and syntax:
+
+=head3 execute
+        
+     ! execute:
+          This command simply execute the supplied sql statement.
+     
+     e.g.
+     ! execute update foo set name = $!name
+
+=head3 capture
+    
+     ! capture:
+          This is an execute command who's dataset will be cached (stored)
+          for later use. Note! This command can only be used with a select
+          statement.
+     
+     e.g.
+     ! capture select * from foo
+
+=head3 replace
+    
+     ! replace:
+          This is an execute command that after successfully executed,
+          replaces the currently scoped parameters with data from the last
+          row in its dataset. Note! This command can only be used with a
+          select statement.
+        
+     e.g.
+     ! replace select 'foo' as `foo`, 'bar' as `bar`, 'baz' as `baz`
+
+=head3 include
+    
+     ! include:
+          This command processes the supplied sql file in a sub transaction.
+          Note A! The included sql file is isolated from the current
+          processing. Any capture commands encountered in the included sql
+          files will not have it's dataset cached unless the setname directive
+          is used to provide a specific reference name to the resultset.
+          Note B! The included sql file will use the currently scoped
+          variables to process the included sql file unless a comma-seperated
+          list of variables are used with the sql file name.
+     
+     e.g.
+     ! include foo/bar.sql
+     ! include foo/bar.sql foo, bar, baz
+
+=head3 proceed
+    
+     ! proceed:
+          This command should be read "proceed if" because it evaluates the
+          string passed (perl code) for truth, if true, it continues if
+          false it skips to the next proceed command or until the end of
+          the sql file.
+          
+     e.g.
+     ! proceed $!count > 5
+     ! ...
+     ! forward 5
+     ! proceed 1
+     ! forward 0
+     ! ...
+
+=head3 ifvalid
+    
+     ! ifvalid: [validif:]
+          These commands are synonyms for proceed and exist for readability.
+
+=head3 storage
+    
+     ! storage:
+          This command does absolutely nothing except store the sql
+          statement in the commands list (queue) for processing individually
+          from within the perl code with a method like process_command.
+          
+     e.g.
+     ! storage insert into foo (this, that) values ('foo', 'bar')
+
+=head3 declare
+    
+     ! declare:
+          This command is effectively equivalent to the `select .. into` sql
+          syntax and uses an sql select statement to add vairables to the
+          scope for processing.
+     
+     e.g.
+     ! declare select 'foo' as `foo`, 'bar' as `bar`, 'baz' as `baz`
+
+=head3 forward
+    
+     ! forward:
+          This command takes an index and jumps to that command line and
+          continues from there. Similar to a rewind or fast forward function
+          for the command queue.
+          
+     e.g.
+     # endless loop
+     ! ...
+     ! ...
+     ! forward 0
+
+=head3 process
+    
+     ! process:
+          This command takes an index and executes that command line.
+     
+     e.g.
+     # run the first command twice
+     ! ...
+     ! process 0
+
+=head3 perl -e
+    
+     ! perl -e:
+          This command passes the statement to perl's eval function which
+          can evaluate perl code and scoped runtime variables.
+     
+     e.g.
+     ! perl -e $!count > 5
+
+=head3 examine
+    
+     ! examine:
+          This command is used for debugging, it errors out with the
+          compiled statement passed to it.
+          
+     e.g.
+     ! examine select * from foo where id = $!id
+
+=head3 setname
+
+     ! setname:
+          This command is used to set a name to recall the reference of
+          the next captured resultset. If this seems confusing don't worry,
+          it's easier to use than to explain.
+          
+     e.g.
+     ! setname foo
+
+
+
+
+=head1 OTHER DOCUMENTATION
+
+=over 4
+
+
+=item * L<DBIx::Simple::Batch::Documentation>
+
+
+=item * L<DBIx::Simple::Batch::Documentation::Directives|DBIx::Simple::Batch::Documentation::Directives>
+
+
+=back
+
+
+=head1 PROJECT
+
+DBIx-Simple-Batch - Alternative to ORM and Stored Procedures
+
+=head1 PROJECT DESCRIPTION
+
+L< DBIx::Simple::Batch|dbix::simple::batch::documentation> is formerly DBIx::Simple::Procedure.
+
+This module allows your program to process text files containing one or many commands that execute SQL statements sequentially. Please keep in mind that DBIx::Simple::Batch is an alternative to database stored procedures and not a replacement or emulation of them. Essentially it is an interface to execute and return data from multiple queries with some logic.
+
+=head1 PROJECT POD URL
+
+L<http://app.alnewkirk.com/pod/projects/dbix/simple/batch/>
+
+
+=head1 AUTHOR
+
+Al Newkirk, C<< <awncorp at cpan.org> >>
+
+=head1 BUGS
+
+Please report any bugs or feature requests to Al Newkirk, C<< <awncorp at cpan.org> >>. I will respond in the order they are processed.
+
+=head1 SUPPORT
+
+You can find documentation for this module with the perldoc command.
+
+    perldoc DBIx::Simple::Batch
+
+or email the developer at:
+
+    Al Newkirk, C<< <awncorp at cpan.org> >>
+
+
+=head1 ACKNOWLEDGEMENTS
+
+Al Newkirk, C<< <awncorp at cpan.org> >>
+
+=head1 COPYRIGHT & LICENSE
+
+Copyright 2009 Al Newkirk, all rights reserved.
+
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
+
+=cut

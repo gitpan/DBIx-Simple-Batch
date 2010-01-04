@@ -5,13 +5,13 @@ inc/Module/Install/Makefile.pm
 inc/Module/Install/MakeMaker.pm
 inc/Module/Install/Metadata.pm
 lib/DBIx/Simple/Batch.pm
+lib/DBIx/Simple/Documentation.pod
+lib/DBIx/Simple/Documentation/Directives.pod
 Makefile.PL
-MANIFEST			This list of files
+MANIFEST
 META.yml
 README
 sql/tables/users/getall
 t/db-connection.t
 t/00-load.t
-t/pod-coverage.t
-t/pod.t
 TODO

@@ -11,6 +11,7 @@ WriteMakefile(
     PL_FILES            => {},
     PREREQ_PM => {
         'DBIx::Simple' => 0,
+        'File::Find' => 0,
         'Test::More' => 0,
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },

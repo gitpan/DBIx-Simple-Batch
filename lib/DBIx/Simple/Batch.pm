@@ -3,278 +3,188 @@ package DBIx::Simple::Batch;
 use warnings;
 use strict;
 use DBIx::Simple;
+use File::Find;
 
 =head1 NAME
 
-DBIx::Simple::Batch - An Alternative To SQL Stored Procedures using DBIx::Simple
+DBIx::Simple::Batch - An Alternative To ORM and SQL Stored Procedures.
 
 =head1 VERSION
 
-Version 1.64
+Version 1.65
+
+=head1 DOCUMENTATION
+
+=over 4
+
+=item * L<DBIx::Simple::Batch::Documentation>
+
+=item * L<http://app.alnewkirk.com/pod/projects/dbix/simple/batch/>
+
+=back
 
 =cut
 
-our $VERSION = '1.64';
+our $VERSION = '1.65';
 our @properties = caller();
-
-=head1 SYNOPSIS
-
-DBIx::Simple::Batch is formerly DBIx::Simple::Procedure.
-
-This module allows your program to process text files containing one or many
-commands that execute SQL statements sequentially. Please keep in mind that
-DBIx::Simple::Batch is an alternative to database stored procedures and not
-a replacement or emulation of them. Essentially it is an interface to execute
-and return data from multiple queries.
-
-Here is an example of how to setup and process a (sql) text file.
-
-    # DBIx::Simple::Batch uses DBIx::Simple and provides an accessor through the
-    DBIx::Simple::Batch->{dbix} hash reference.
-    
-    use DBIx::Simple::Batch;
-    my $db = DBIx::Simple::Batch->new($path_to_sqlfiles, 'dbi:SQLite:dbname=file.dat');
-    # Will error out using DBIx::Simple if a connection error occurs.
-    
-    # The queue function takes one parameter (a text file) that contains DBIx::Simple::Batch
-    # sql commands.
-    
-    # The process_queue function processes all queued sql statements using the parameters passed
-    # to it, similar to the execute function of DBI.
-    
-    $db->queue($sql_file)->process_queue(@sql_parameters, {other_param_a => 'excepts_hashrefs_also'});
-    
-    # The cache function returns an array of resultsets, or the resultset of the index passed,
-    # return by the select statements encountered in the sql file.
-    # Note! files included using the "include" command will not have there resultsets cached,
-    # even if a "capture" command is encountered, only the select statement(s) found in the
-    # initial sql file are cached in the order they are encountered. 
-    
-    foreach my $result (@{$db->sets->[0]}){
-        # do something with the records of the first resultset
-        $result->{...};
-    }
-
-=head1 SQL FILE SYNTAX
-
-The (sql) procedural text file to be processed may contain any text you desire, e.g.
-comments and other markup. DBIx::Simple::Batch only reacts to command lines (commands).
-These instructions (or commands) must be placed on its own line and be prefixed with an
-exclamation point, a space, the command, another space, and the statement to be evaluated.
-
-E.g. "! execute select * from foo".
-
-Multiple commands can be used in a single sql file.
-Update! multi-line sql statements are now supported. See below under "Included Example"
-
-    SQL File Commands:
-        
-    ! execute:
-        This command simply execute the supplied sql statement.
-    
-    ! capture:
-        This is an execute command who's dataset will be cached (stored) for later use.
-        Note! This command can only be used with a select statement.
-    
-    ! replace:
-        This is an execute command that after successfully executed, replaces the scope
-        parameters with data from the last row in its dataset. Note! This command can
-        only be used with a select statement.
-    
-    ! include:
-        This command processes the supplied sql file in a sub transaction. Note! Included
-        sql file processing is isolated from the current processing. Any capture commands
-        encountered in the included sql files will not cache the dataset.
-    
-    ! proceed:
-        This command should be read "proceed if" because it evaluates the string passed
-        (perl code) for truth, if true, it continues if false it skips to the next proceed
-        command or until the end of the sql file.
-    
-    ! ifvalid: [validif:]
-        This command is a synonym for proceed.
-    
-    ! storage:
-        This command does absolutely nothing except store the sql statement in the commands
-        list (queue) for processing individually from within the perl code with a method
-        like process_command.
-    
-    ! declare:
-        This command is effectively equivalent to the select .. into sql sytax and uses an
-        sql select statement to add vairables to the scope for processing
-        (e.g. ! declare select `name` from `foo` where `id` = $0) can be used in other
-        instructions as $!name, e.g. ! execute update `foo` set `name` = $!name where `id` = $0.
-    
-    ! forward:
-        This command takes an index and jumps to that command line and continues from there.
-        Similar to a rewind or fast forward function for the command queue.
-    
-    ! process:
-        This command takes an index and executes that command line.
-    
-    ! perl -e:
-        This command passes the statement to perl's eval function which can evaluate perl code
-        and even runtime variables.
-    
-    ! examine:
-        This command is used for debugging, it errors out with the compiled statement passed to it.
-    
-=head1 INCLUDED EXAMPLE
-
-Inside tables/users/getall (.sql omitted purposefully).
-
-    # mysql example
-    
-    # this command tell DSP to treat passed in parameters that are left blank
-    # as integers with a value of zero, by default it is '' (an empty string),
-    # it can also be null
-    ! setting blank as zero
-    
-    # does what it says, no special magic here
-    ! execute create table if not exists `group` (`id` int(11) auto_increment, `info` varchar(255) not null, primary key(`id`) )
-    ! execute truncate table `group`
-    
-    # the declare command stores the list of values in the custom parameters hash
-    # using the column names as keys
-    ! declare select '0' as `count`
-    ! execute insert into `group` values (null, concat_ws(' ', 'I typed', $0, ($!count + 1), 'times.'))
-    
-    # hopefully not often but there are times when the sql command file should
-    # loop, evakuate, etc
-    
-    # validif, and ifvalid are synonyms for proceed reads a perl expression which
-    # may contain passed or declared parameters, and if true proceeds to the next
-    # command, not false, skip every following command until it reached a proceed,
-    # ifvalid, or validif command the evalutes true, or reaches the end of the file
-    
-    # begin loop
-    ! declare select count(*) as `count` from `group`
-    ! validif $!count < 5
-    ! forward 4
-    ! ifvalid 1
-    # end loop
-    
-    # here is an example of a multi-line sql statement
-    ! execute {
-    INSERT INTO `group`
-    VALUES     (NULL,
-                concat_ws(' ', 'The last record to be entered was number', $!count))
-
-    }
-    
-    # capture store the returned data in the sets array which contains all resultsets
-    # returned by the encountered capture commands
-    ! capture select * from `group`
-
-Inside the test.pl script.
-
-    #!/usr/env/perl -w
-    
-    BEGIN {
-        use FindBin;
-        use lib "$FindBin::Bin/lib";
-    }
-    
-    use DBIx::Simple::Batch;
-    
-    # connecting to a mysql database
-    my $fs = "$FindBin::Bin/sql/";
-    my $db = DBIx::Simple::Batch->new(
-        $fs,
-        'dbi:mysql:database=test', # dbi source specification
-        'root', '',                     # username and password
-    );
-    
-    $db->queue('tables/users/getall')->process_queue('this is a test');
-    
-    foreach my $result (@{$db->sets->[0]}){
-        print "$result->{info}\n"; # database column
-    }
-     
-    print "\nDone. Found " . ( @{$db->sets->[0]} || 0 ) . " records";
-
-=head1 PASSED-IN PARAMETERS Vs. CUSTOM PARAMETERS
-
-The difference between (what we refer to as) passed-in parameters and custom parameters 
-is determined by how those values are passed to the process_queue and process_command methods.
-They are also differentiated by the expressions used identify them. Technically, passed-in
-parameters and custom parameters are one in the same. Passed-in parameters are passed to
-the process_command and process_queue methods as an array of values and are referred to in the
-sql file using expressions like this: [$0, $1, $2, $3]. Custom parameters are passed to the
-process_command and process_queue methods as a hash reference and are referred to in the sql file
-using expressions like this: [$!hashrefkey1, $!hashrefkey2].
-
-=head1 MORE SQL COMMAND FILE EXAMPLES
-
-Replacing passed in parameters.
-
-    ... in script
-    $dsp->queue(...)->process_queue('this', 'that');
-    ... in sql file
-    ! replace select 'baz' as `foo`
-    # $0 in the sql command file was 'this' and now has the value 'baz'
-    # $1 in the sql command file was 'that' and now has no value or is undefined
-    # basically, the replace command overwrites @_ (all passed in values)
-    
-    Alternatively...
-    
-    ... in script
-    $dsp->queue(...)->process_queue('this', 'that', { foo => 'the', bar => 'other'});
-    ... in sql file
-    ! declare select 'baz' as `foo`
-    # $0, and $1 in the sql command file are left untouched
-    # $!foo in the sql command file was 'the' and now has the value 'baz'
-    # basically, the declare command updates or appends the internal (custom parameters) hash
-
-Using the storage, forward and process commands.
-
-    ... in script
-    $dsp->queue(...)->process_queue({'foo' => 'bar'});
-    ... in sql file
-    ! forward 2
-    ! execute insert into `foo` (NULL, 'bar', 'baz')
-    ! execute insert into `foo` (NULL, 'bar', 'baz')
-    ! process 1
-    ! capture select * from `foo`
-    
-    # this sql file is intentionally meant to be confusing, the insert query will
-    # be executed 2 times, as a test, see if you can figure out why
-
-NOTE! When using the forward and/or process commands, please be aware that they
-both take a command line index which means that if your not careful when you update
-the sql file at a later date, you could be shifting the index which means your sql
-file will execute but not as you intended.
 
 =head1 METHODS
 
-=cut
-
 =head2 new
 
-The new method initializes a new DBIx::Simple and DBIx::Simple::Batch
-object and accepts all parameters required/accepted by DBIx::Simple.
+I<The new method initializes a new DBIx::Simple::Batch object.>
+
+new B<arguments>
+
+=over 3
+
+=item L<$path|/"$path">
+
+=item L<@connection_string|/"@connection_string">
+
+=back
+
+new B<usage and syntax>
+
+    $db = DBIx::Simple::Batch->new($path);
+    
+    takes 2 arguments
+        1st argument           - required
+            $path              - path to folder where sql files are stored
+        2nd argument           - required
+            @connection_string - display help for a specific command
+            
+    example:
+    my $path = '/var/www/app/queries';
+    my @connection_string = ('dbi:SQLite:/var/www/app/foo.db');
+    my $db = DBIx::Simple::Batch->new($path, @connection_string);
+    
+    # $path can also take a file pattern which turns on object mapping
+    my $path = '/var/www/app/queries/*.sql';
+    my @connection_string = ('dbi:SQLite:/var/www/app/foo.db');
+    my $db = DBIx::Simple::Batch->new($path, @connection_string);
+    # now you can
+    $db->call->folder->file(...);
 
 =cut
 
 sub new {
     my ($class, $path, @connect_options) = @_;
     my $self = {};
+    my $file_pattern = '';
     bless $self, $class;
     $self->{set_names} = {};
     $self->{sets} = [];
-    $self->{path} = $path;
-    $self->{dbix} = DBIx::Simple->connect(@connect_options) or die DBIx::Simple->error;
+    
+    $self->{dbix} = DBIx::Simple->connect(@connect_options)
+        or die DBIx::Simple->error;
+    
+    ($path, $file_pattern) = $path =~ m/([^\*]+)(\*\.\w+)?/;
+    
+    unless (-d -r $path) {
+        die "The path specified '$path', " .
+        "does not exist and/or is not accessible.";
+    }
+    
+    $self->{path}          = $path =~ m/[\\\/]$/ ? $path : "$path/";
+    $self->{file_pattern}  = $file_pattern;
+    
+    # turn-on object mapping
+    if ($self->{file_pattern}) {
+        our $package = "package DBIx::Simple::Batch::Map;\n";
+        our $package_switch = 0;
+        our $new_routine = 'sub new {
+            my $class = shift;
+            my $base  = shift;
+            my $self = {};
+            $self->{base} = $base;
+            bless $self, $class;
+            return $self;
+        }';
+        find sub {
+            my $file      = $_;
+            my $file_path = $File::Find::name;
+            my $directory = $File::Find::dir;
+            my $namespace = 'DBIx::Simple::Batch::Map::';
+            
+            # specify package
+            if (-d $file_path) {
+                my $package_name = $file_path;
+                my $prune = $path; $prune =~ s/[\\\/]+$//;
+                $package_name =~ s/^$prune([\\\/])?//;
+                if ($package_name) {
+                    $package_name =~ s/[\\\/]/::/g;
+                    $package_name =~ s/[^:a-zA-Z0-9]/\_/g;
+                    $package .= "$new_routine\n";
+                    my $fqns = "$namespace$package_name";
+                    my $instantiator = "$fqns"."->new(". 'shift->{base}' .")";
+                    my $sub = $package_name; $sub =~ s/.*::([^:]+)$/$1/;
+                    $package .=
+                        "sub $sub { return $instantiator }\n";
+                    $package .= "package $fqns;\n";
+                    $package_switch = 1;
+                }
+            }
+            elsif (-f $file_path) {
+                my $pat = $self->{file_pattern};
+                if ($pat) {
+                    $pat =~ s/^\*\.(\w+)/\.\*$1/;
+                }
+                else {
+                    $pat = '.*';
+                }
+                if ($file =~ /$pat/) {
+                    my $name = $file;
+                    $name =~ s/\.\w+$//g;
+                    $name =~ s/\W/\_/g;
+                    $package .= "$new_routine\n" if $package_switch == 1;
+                    $package_switch = 0;
+                    $package .= "sub $name ". '{
+                        my $db = shift->{base};
+                        return $db->queue(\''. $file_path .'\')->process(@_);
+                    }' ."\n";
+                }
+            }
+            else {
+                $package .= "$file -> ???\n";
+            }
+            
+        }, $self->{path};
+            
+        eval "$package";
+            die "Error mapping sql file objects: $@" if $@;
+    }
+    
+    # load directives
     $self->_load_commands;
     return $self;
 }
 
-=begin comment
+=head2 call
 
-The _load_commands method is an internal method for build the commands dispatch table.
+I<The call method is used to access and process sql files in an object-oriented fashion.>
 
-=end comment
+call B<arguments>
+
+No arguments.
+
+call B<usage and syntax>
+
+    $db->call;
+    
+    takes 0 arguments
+            
+    example:
+    $db->call->file(...);
+    $db->call->folder->file;
+    $db->call->folder->folder->file;
+
 =cut
 
+sub call { return DBIx::Simple::Batch::Map->new(shift); }
+
+# The _load_commands method is an internal method for building the commands
+# dispatch table.
 
 sub _load_commands {
     my $self = shift;
@@ -333,9 +243,16 @@ sub _load_commands {
     $self->{commands}->{include} = sub {
         my ($statement, @parameters) = @_;
         my ($sub_sqlfile, $placeholders) = split /\s/, $statement;
-        DBIx::Simple::Batch->new($self->{path}, $self->{dbix}->{dbh})
-        ->queue($sub_sqlfile)->process_queue(@parameters, $self->{processing}
-        ->{custom_parameters});
+        @parameters = split /[\,\s]/, $placeholders if $placeholders;
+        my $sub = DBIx::Simple::Batch->new($self->{path}, $self->{dbix}->{dbh});
+        $sub->queue($self->{path}.$sub_sqlfile)->process_queue(@parameters,
+        $self->{processing}->{custom_parameters});
+        # copying sub resultsets
+        if (keys %{$sub->{set_names}}) {
+            map {
+                $self->{set_names}->{$_} = $sub->{set_names}->{$_}
+            } keys %{$sub->{set_names}};
+        }
     };
     
     #! storage: stores sql statements for later
@@ -403,28 +320,18 @@ sub _load_commands {
     }
 }
 
-=begin comment
-
-The _execute_query method is an internal method for executing queries against the databse in
-a standardized fashion.
-
-=end comment
-=cut
-
+# The _execute_query method is an internal method for executing queries
+# against the databse in a standardized fashion.
 
 sub _execute_query {
     my ($self, $statement, @parameters) = @_;
-    my $resultset = $self->{dbix}->query( $statement, @parameters ) or die $self->_error(undef, @parameters);
+    my $resultset = $self->{dbix}->query( $statement, @parameters ) or
+        die $self->_error(undef, @parameters);
     return $resultset;
 }
 
-=begin comment
-
-The _error method is an internal method that dies with a standardized error message.
-
-=end comment
-=cut
-
+# The _error method is an internal method that dies with a standardized
+# error message.
 
 sub _error {
     my ( $self, $message, @parameters ) = @_;
@@ -452,14 +359,8 @@ sub _error {
     return $error_message;
 }
 
-
-=begin comment
-
-The _processor method is an internal methoed that when passed a command hashref, processes the command.
-
-=end comment
-=cut
-
+# The _processor method is an internal methoed that when passed a command
+# hashref, processes the command.
 
 sub _processor {
     my ($self, $cmdref) = @_;
@@ -504,14 +405,9 @@ sub _processor {
     }
 }
 
-=begin comment
-
-The _parse_parameters method examines each initially passed in parameter specifically looking for a hashref
-to add its values to the custom parameters key.
-
-=end comment
-=cut
-
+# The _parse_parameters method examines each initially passed in parameter
+# specifically looking for a hashref to add its values to the custom
+# parameters key.
 
 sub _parse_parameters {
     my ($self, @parameters) = @_;
@@ -528,22 +424,17 @@ sub _parse_parameters {
     return $self;
 }
 
-=begin comment
-
-The _parse_sqlfile method scans the passed (sql) text file and returns a list of sql statement queue objects.
-
-=end comment
-=cut
-
+# The _parse_sqlfile method scans the passed (sql) text file and returns
+# a list of sql statement queue objects.
 
 sub _parse_sqlfile {
     my ($self, $sqlfile) = @_;
     my (@lines, @statements);
     # open file and fetch commands
     $self->{file} = $sqlfile;
-    open (SQL, "$self->{path}$sqlfile") || die $self->_error( "Could'nt open $self->{path}$sqlfile sql file" );
+    open (SQL, "$sqlfile") || die $self->_error( "Could'nt open $sqlfile sql file" );
     push @lines, $_ while(<SQL>);
-    close SQL || die $self->_error( "Could'nt close $self->{path}$sqlfile sql file" );
+    close SQL || die $self->_error( "Could'nt close $sqlfile sql file" );
     # attempt to parse commands w/multi-line sql support
     my $use_mlsql = 0;
     my $mlcmd = '';
@@ -580,13 +471,8 @@ sub _parse_sqlfile {
     return @statements;
 }
 
-=begin comment
-
-The _validate_sqlfile method make sure that the supplied (sql) text file conforms to its command(s) rules.
-
-=end comment
-=cut
-
+# The _validate_sqlfile method make sure that the supplied (sql) text
+# file conforms to its command(s) rules.
 
 sub _validate_sqlfile {
     my ($self, @statements) = @_;
@@ -602,8 +488,27 @@ sub _validate_sqlfile {
 
 =head2 queue
 
-The queue function parses the passed (sql) text file and build the list of sql statements to be
-executed and how.
+I<The queue function parses the passed (sql) text file and build the list
+of sql statements to be executed and how.>
+
+queue B<arguments>
+
+=over 3
+
+=item L<$sql_file|/"$sql_file">
+
+=back
+
+queue B<usage and syntax>
+
+    $db->queue($sql_file);
+    
+    takes 1 argument
+        1st argument  - required
+            $sql_file - path to the sql file to process
+            
+    example:
+    $db->queue($sql_file);
 
 =cut
 
@@ -621,7 +526,36 @@ sub queue {
 
 =head2 process_queue
 
-The process_queue function sequentially processes the recorded commands found the (sql) text file.
+I<The process_queue function sequentially processes the recorded commands
+found the (sql) text file.>
+
+process_queue B<arguments>
+
+=over 3
+
+=item L<@parameters|/"@parameters">
+
+=back
+
+process_queue B<usage and syntax>
+
+    $self->process_queue(@parameters);
+    
+    takes 1 argument
+        1st argument    - required
+            @parameters - parameters to be used in parsing the sql file
+            
+    example:
+    $db->process_queue(@parameters);
+    $db->process_queue($hashref, @parameters);
+    
+process_queue B<synonyms>
+
+=over 3
+
+=item * process
+
+=back
 
 =cut
 
@@ -651,12 +585,14 @@ sub process_queue {
     return $self;
 }
 
-=head2 sets
+# process_queue synonym
 
-The sets method provides direct access to the resultsets array or
-resultsets.
+sub process {
+    shift->process_queue(@_);
+}
 
-=cut
+# The sets method provides direct access to the resultsets array or
+# resultsets.
 
 sub sets {
     return shift->{sets};
@@ -664,9 +600,37 @@ sub sets {
 
 =head2 cache
 
-The cache method accesses an arrayref of resultsets that were captured
+I<The cache method accesses an arrayref of resultsets that were captured
 using the (sql file) capture command and returns the resultset of the
-index or name passed to it or an empty arrayref.
+index or name passed to it or returns 0.>
+
+cache B<arguments>
+
+=over 3
+
+=item L<$index|/"$index">
+
+=back
+
+cache B<usage and syntax>
+
+    my $results = $db->cache($index);
+    
+    takes 1 argument
+        1st argument  - required
+            $index    - name or array index of the desired resultset
+            
+    example:
+    my $resultset = $db->cache('new_group');
+    my $resultset = $db->cache(2);
+
+cache B<synonyms>
+
+=over 3
+
+=item * rs
+
+=back
 
 =cut
 
@@ -685,22 +649,14 @@ sub cache {
     return 0;
 }
 
-=head2 rs
-
-The rs method is a synonym for the cache method
-
-=cut
+# The rs method is a synonym for the cache method
 
 sub rs {
     return shift->cache(@_);
 }
 
-=head2 command
-
-The command method is used to queue a command to be processed later by the process_queue method. Takes two
-arguments, "command" and "sql statement", e.g. command('execute', 'select * from foo').
-
-=cut
+# The command method is used to queue a command to be processed later by the # # # process_queue method. Takes two arguments, "command" and "sql statement",
+# e.g. command('execute', 'select * from foo').
 
 sub command {
     my ($self, $command, $statement) = @_;
@@ -710,13 +666,10 @@ sub command {
     return $self;
 }
 
-=head2 process_command
-
-The process_command method allows you to process the indexed sql satements from your sql file
-individually. It take two argument, the index of the command as it is encountered in the sql file and tries
-returns a resultset, and any parameters that need to be passed to it.
-
-=cut
+# The process_command method allows you to process the indexed sql
+# satements from your sql file individually. It take two argument, the
+# index of the command as it is encountered in the sql file and tries
+# returns a resultset, and any parameters that need to be passed to it.
 
 sub process_command {
     my ($self, $index, @parameters) = @_;
@@ -731,7 +684,20 @@ sub process_command {
 
 =head2 clear
 
-The clear method simply clears the cache (resultset store)
+I<The clear method simply clears the cache (the resultset space).>
+
+clear B<arguments>
+
+No arguments.
+
+clear B<usage and syntax>
+
+    $db->clear;
+    
+    takes 0 arguments
+            
+    example:
+    $db->clear
 
 =cut
 
@@ -759,15 +725,11 @@ Please report any bugs or feature requests to C<bug-DBIx-Simple-Batch at rt.cpan
 the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=DBIx-Simple-Batch>.
 I will be notified, and then you'll automatically be notified of progress on your bug as I make changes.
 
-
-
-
 =head1 SUPPORT
 
 You can find documentation for this module with the perldoc command.
 
     perldoc DBIx::Simple::Batch
-
 
 You can also look for information at:
 
@@ -791,9 +753,7 @@ L<http://search.cpan.org/dist/DBIx-Simple-Batch/>
 
 =back
 
-
 =head1 ACKNOWLEDGEMENTS
-
 
 =head1 COPYRIGHT & LICENSE
 
@@ -804,7 +764,6 @@ under the terms of either: the GNU General Public License as published
 by the Free Software Foundation; or the Artistic License.
 
 See http://dev.perl.org/licenses/ for more information.
-
 
 =cut
 

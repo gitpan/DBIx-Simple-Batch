@@ -1,0 +1,204 @@
+=head1 NAME
+
+DBIx::Simple::Batch::Documentation
+
+=head1 DESCRIPTION
+
+This module allows your program to process text files containing one or many commands that execute SQL statements sequentially. Please keep in mind that DBIx::Simple::Batch is an alternative to database stored procedures and not a replacement or emulation of them. Essentially it is an interface to execute and return data from multiple queries.
+
+=head1 SYNOPSIS
+
+DBIx::Simple::Batch, formerly DBIx::Simple::Procedure, is an alternative to ORM packages and Database Stored Procedures.
+
+=head1 QUICK START
+
+L<DBIx::Simple::Batch> is meant to be a viable alternative to SQL stored
+procedures and ORM packages. DBIx::Simple::Batch attmepts to accomplish
+this by allowing the developer to stored SQL statements with some logic
+in text files to be parsed and executed sequentially hence the idea of
+"simple-batch" processing.
+
+=head2 THE SQL FILE
+
+As stated before, the sql file contains one or more single or multi-line
+SQL statements. The sql file may also contain one or more directives which 
+controls how the file is processed. The following is a simple example of
+an sql file.
+
+    # this is a comment
+    # this file is stored in /var/www/newapp/queries
+    ! setname interesting
+    ! capture {
+        SELECT
+            fileinfo_id
+            , fileinfo_author_id
+            , fileinfo_blog_id
+            , fileinfo_category_id
+            , fileinfo_entry_id
+            , fileinfo_file_path
+            , fileinfo_url
+        FROM
+            mt_fileinfo
+        WHERE
+            fileinfo_id = $!id;
+    }
+    
+Now for the explanation, the `setname` directive tells the sql file
+processor to create a reference to the next `capture`d resultset using the
+name specified which in this case is (`interesting`). The `capture` directive
+instructs the processor to store the resultset (if any) in the resultset
+`cache` for later retrieval. By default, directives can only exist on a
+single line in an sql file but this is not optimal for SQL statements and
+readibility, so by using curly brackets (`{...}`), you can now span your
+commands across multiple lines. Note! The capture command only processes
+`select` statements.
+
+=head2 THE CODE FILE
+
+Now that we have our basic sql file, we need to access those instructions
+from our Perl code file. The following is an example of how you might execute
+the sql file above.
+
+    my $dir = '/var/www/newapp/queries/';
+    my $db  = DBIx::Simple::Batch->new($dir, 'dbi:mysql:movabletype', 'root');
+    
+    # the standard way to process and retrieve results
+    
+    $db->queue($dir."files/get_all')->process_queue({ id => 1 });
+    my $files = $db->rs('interesting'); # or $db->rs(0);
+    foreach my $file (@{$files}) {
+        ...
+    }
+    
+    $db->clear;
+    
+    # the object-oriented way to process and retrieve results
+    
+    my $files = $db->files->get_all({id => 1})->rs('interesting');
+    foreach my $file (@{$files}) {
+        ...
+    }
+    
+    $db->clear;
+    
+    # we just processed sql file /var/www/newapp/queries/files/get_all
+    
+=head2 SQL FILE LOGIC
+
+The logical capabilities of an sql file are far from that of a scripting
+language or even stored procedure standards, however, the logical constructs
+that exist are designed to be easier to use, understand, alter and execute.
+The following are a few examples of how and when to use the logical
+directives and strategies.
+
+    # insert some stuff and return the insert id
+    ! setting blank as null
+    ! execute insert into `foo` (id, name, created) values ($!id, $!name, $!created)
+    }
+    # id and created variables that are blank and set to null
+    ! setname new_user
+    ! capture select max(id), name, email, created from `foo`
+
+Not much to see there, a simple insert and select procedure. Now lets try a more 
+plausibile example. Here we will take user input from a standard contact form,
+log the message and create a user account.
+
+The html page contact form will submit the following parameters:
+
+    full_name, title, address, city, state, zip, email, comments
+    
+The sql files that will store the form data:
+
+    # in file /var/www/newapp/queries/messages/log_message
+    ! execute ...
+    ! declare select $!full_name as `name`, $!email as `email`
+    ! include users/new_user
+    
+    # in file /var/www/newapp/queries/users/new_user
+    ! setting blank as null
+    ! execute insert into `users` (name, email) values ($!name, $!email)
+    ! setname new_user
+    ! capture select max(id), name, email, created from `foo`
+
+=head1 PASSED-IN PARAMETERS Vs. CUSTOM PARAMETERS
+
+The difference between (what we refer to as) passed-in parameters and
+custom parameters is determined by how those values are passed to the
+process_queue and process_command methods. They are also differentiated by
+the expressions used to identify them. Technically, passed-in parameters
+and custom parameters are one in the same. Passed-in parameters are passed
+to the process_command and process_queue methods as an array of values and
+are referred to in the sql file using expressions like this:
+[$0, $1, $2, $3]. Custom parameters are passed to the process_command and
+process_queue methods as a hash reference and are referred to in the sql file
+using expressions like this: [$!hashrefkey1, $!hashrefkey2].
+
+=head1 IMPORTANT NEWS
+
+NOTE! When using the forward and/or process commands, please be aware that
+they both take a command line index which means that if your not careful
+when you update the sql file at a later date, you could be shifting the
+index which means your sql file will execute but not as you intended.
+
+
+
+=head1 OTHER DOCUMENTATION
+
+=over 4
+
+
+=item * L<DBIx::Simple::Batch::Documentation>
+
+
+=item * L<DBIx::Simple::Batch::Documentation::Directives|DBIx::Simple::Batch::Documentation::Directives>
+
+
+=back
+
+
+=head1 PROJECT
+
+DBIx-Simple-Batch - Alternative to ORM and Stored Procedures
+
+=head1 PROJECT DESCRIPTION
+
+L< DBIx::Simple::Batch|dbix::simple::batch::documentation> is formerly DBIx::Simple::Procedure.
+
+This module allows your program to process text files containing one or many commands that execute SQL statements sequentially. Please keep in mind that DBIx::Simple::Batch is an alternative to database stored procedures and not a replacement or emulation of them. Essentially it is an interface to execute and return data from multiple queries with some logic.
+
+=head1 PROJECT POD URL
+
+L<http://app.alnewkirk.com/pod/projects/dbix/simple/batch/>
+
+
+=head1 AUTHOR
+
+Al Newkirk, C<< <awncorp at cpan.org> >>
+
+=head1 BUGS
+
+Please report any bugs or feature requests to Al Newkirk, C<< <awncorp at cpan.org> >>. I will respond in the order they are processed.
+
+=head1 SUPPORT
+
+You can find documentation for this module with the perldoc command.
+
+    perldoc DBIx::Simple::Batch
+
+or email the developer at:
+
+    Al Newkirk, C<< <awncorp at cpan.org> >>
+
+
+=head1 ACKNOWLEDGEMENTS
+
+Al Newkirk, C<< <awncorp at cpan.org> >>
+
+=head1 COPYRIGHT & LICENSE
+
+Copyright 2009 Al Newkirk, all rights reserved.
+
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
+
+=cut

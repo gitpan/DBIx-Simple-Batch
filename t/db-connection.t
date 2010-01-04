@@ -17,16 +17,14 @@ BEGIN {
 # Test body borrowed from dbix-simple
 
 my $fs = "$FindBin::Bin/../sql/";
-my $db = DBIx::Simple::Batch->new(
-    $fs,
-    'dbi:SQLite:dbname=:memory:', '', '', { RaiseError => 1 } # dbi source specification
-);
+my @p  = ('dbi:SQLite:dbname=:memory:', '', '', { RaiseError => 1 });
+my $db = DBIx::Simple::Batch->new($fs, @p);
 
 # connected
 ok($db, 'connection test');
 
 # read sql file queue
-ok($db->queue('tables/users/getall'), 'test sql file access');
+ok($db->queue($fs.'tables/users/getall'), 'test sql file access');
 
 # processed queue
 ok($db->process_queue('this is a test'), 'process queue');
