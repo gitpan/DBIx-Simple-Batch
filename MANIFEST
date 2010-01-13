@@ -1,4 +1,6 @@
 Changes
+dbix-simple-batch.kpf
+ex/x01.pl
 inc/Module/Install.pm
 inc/Module/Install/Base.pm
 inc/Module/Install/Makefile.pm
@@ -12,6 +14,7 @@ MANIFEST
 META.yml
 README
 sql/tables/users/getall
-t/db-connection.t
+sql/tables/users/testall
 t/00-load.t
+t/db-connection.t
 TODO

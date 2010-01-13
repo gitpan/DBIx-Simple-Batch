@@ -1,0 +1,25 @@
+# mysql example
+! setting blank as zero
+
+! execute create table if not exists `group` (`id` integer primary key autoincrement, `info` varchar not null )
+! execute delete from `group`
+
+! declare select '0' as `count`
+! execute insert into `group` values (null, 'I typed ' || $0 || '  ' || ($!count + 1) || ' times.')
+
+# begin loop
+! declare select count(*) as `count` from `group`
+! validif $!count < 5
+! forward 4
+! ifvalid 1
+# end loop
+
+! execute {
+    INSERT INTO `group`
+    VALUES     (NULL,
+                'I dont know who you think you talking too number' || $!count)
+
+}
+
+! setname group
+! capture select * from `group`

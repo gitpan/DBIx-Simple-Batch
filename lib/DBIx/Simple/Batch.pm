@@ -25,7 +25,7 @@ Version 1.65
 
 =cut
 
-our $VERSION = '1.65';
+our $VERSION = '1.66';
 our @properties = caller();
 
 =head1 METHODS
@@ -79,7 +79,7 @@ sub new {
     $self->{dbix} = DBIx::Simple->connect(@connect_options)
         or die DBIx::Simple->error;
     
-    ($path, $file_pattern) = $path =~ m/([^\*]+)(\*\.\w+)?/;
+    ($path, $file_pattern) = $path =~ m/([^\*]+)(\*\.[\w\*]+)?/;
     
     unless (-d -r $path) {
         die "The path specified '$path', " .
@@ -91,16 +91,10 @@ sub new {
     
     # turn-on object mapping
     if ($self->{file_pattern}) {
-        our $package = "package DBIx::Simple::Batch::Map;\n";
+        our @package = ("package DBIx::Simple::Batch::Map;\n");
         our $package_switch = 0;
-        our $new_routine = 'sub new {
-            my $class = shift;
-            my $base  = shift;
-            my $self = {};
-            $self->{base} = $base;
-            bless $self, $class;
-            return $self;
-        }';
+        our $new_routine = 'sub new {my $class = shift;my $base  = shift;my $self = {};$self->{base} = $base;bless $self, $class;return $self;}';
+        our $has_folder = 0;
         find sub {
             my $file      = $_;
             my $file_path = $File::Find::name;
@@ -115,20 +109,19 @@ sub new {
                 if ($package_name) {
                     $package_name =~ s/[\\\/]/::/g;
                     $package_name =~ s/[^:a-zA-Z0-9]/\_/g;
-                    $package .= "$new_routine\n";
+                    push @package, "$new_routine\n";
                     my $fqns = "$namespace$package_name";
                     my $instantiator = "$fqns"."->new(". 'shift->{base}' .")";
                     my $sub = $package_name; $sub =~ s/.*::([^:]+)$/$1/;
-                    $package .=
-                        "sub $sub { return $instantiator }\n";
-                    $package .= "package $fqns;\n";
+                    push @package, "sub $sub { return $instantiator }\n" . "package $fqns;\n";
                     $package_switch = 1;
+                    $has_folder = 1;
                 }
             }
             elsif (-f $file_path) {
                 my $pat = $self->{file_pattern};
                 if ($pat) {
-                    $pat =~ s/^\*\.(\w+)/\.\*$1/;
+                    $pat =~ s/^\*\.([\*\w]+)/\.\*\.$1/;
                 }
                 else {
                     $pat = '.*';
@@ -137,21 +130,23 @@ sub new {
                     my $name = $file;
                     $name =~ s/\.\w+$//g;
                     $name =~ s/\W/\_/g;
-                    $package .= "$new_routine\n" if $package_switch == 1;
+                    push(@package, "$new_routine\n") if $package_switch == 1;
+                    #
                     $package_switch = 0;
-                    $package .= "sub $name ". '{
-                        my $db = shift->{base};
-                        return $db->queue(\''. $file_path .'\')->process(@_);
-                    }' ."\n";
+                    push @package, "sub $name ". '{ my $db = shift->{base}; return $db->queue(\''. $file_path .'\')->process(@_); }' ."\n";
                 }
             }
             else {
-                $package .= "$file -> ???\n";
+                push @package, "$file -> ???\n";
             }
             
         }, $self->{path};
-            
-        eval "$package";
+        # ugly no folders hack, this whole instantiation should be rewritten
+        unless ($has_folder){
+            my $package_name = shift(@package);
+            unshift @package, $package_name, $new_routine;
+        }
+        eval "@package";
             die "Error mapping sql file objects: $@" if $@;
     }
     

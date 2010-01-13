@@ -18,6 +18,10 @@ this by allowing the developer to stored SQL statements with some logic
 in text files to be parsed and executed sequentially hence the idea of
 "simple-batch" processing.
 
+    use DBIx::Simple::Batch;
+    my  $db = DBIx::Simple::Batch->new($dir, 'dbi:mysql:movabletype', 'root');
+    $db->call->sqlfile(@parameters);
+
 =head2 THE SQL FILE
 
 As stated before, the sql file contains one or more single or multi-line
