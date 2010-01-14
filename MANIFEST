@@ -1,6 +1,7 @@
 Changes
 dbix-simple-batch.kpf
 ex/x01.pl
+ex/x02.pl
 inc/Module/Install.pm
 inc/Module/Install/Base.pm
 inc/Module/Install/Makefile.pm

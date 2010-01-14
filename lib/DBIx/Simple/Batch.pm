@@ -11,7 +11,7 @@ DBIx::Simple::Batch - An Alternative To ORM and SQL Stored Procedures.
 
 =head1 VERSION
 
-Version 1.65
+Version 1.67
 
 =head1 DOCUMENTATION
 
@@ -25,7 +25,7 @@ Version 1.65
 
 =cut
 
-our $VERSION = '1.66';
+our $VERSION = '1.67';
 our @properties = caller();
 
 =head1 METHODS
@@ -70,14 +70,17 @@ new B<usage and syntax>
 
 sub new {
     my ($class, $path, @connect_options) = @_;
+    
     my $self = {};
     my $file_pattern = '';
     bless $self, $class;
     $self->{set_names} = {};
     $self->{sets} = [];
     
-    $self->{dbix} = DBIx::Simple->connect(@connect_options)
-        or die DBIx::Simple->error;
+    if (@connect_options) {
+        $self->{dbix} = DBIx::Simple->connect(@connect_options)
+            or die DBIx::Simple->error;
+    }
     
     ($path, $file_pattern) = $path =~ m/([^\*]+)(\*\.[\w\*]+)?/;
     
@@ -178,6 +181,39 @@ call B<usage and syntax>
 
 sub call { return DBIx::Simple::Batch::Map->new(shift); }
 
+=head2 constants
+
+I<the `constants` method is used to define specific custom variables that should
+be including in the execution of all commands.>
+
+constants B<arguments>
+
+=over 3
+
+=item L<$custom_params|/"\%custom_params">
+
+=back
+
+constants B<usage and syntax>
+
+    $self->constants({ param1 => 1, param2 => 2});
+    
+    takes 1 argument
+        1st argument  - required
+            \%hashref - display help for a specific command
+            
+    example:
+    $self->constants({ id => 1 });
+    Now, in every command `$!id` will be replaced with `1` unless a custom
+    param is passed to the process_queue method or call accessors.
+
+=cut
+
+sub constants {
+    my $self = shift;
+    $self->{constants} = shift;
+}
+
 # The _load_commands method is an internal method for building the commands
 # dispatch table.
 
@@ -189,6 +225,23 @@ sub _load_commands {
     
     # determine how blank parameters are handled by default
     $self->{settings}->{blank} = '0';
+    
+    #! connect: creates or replaces the database connection
+    $self->{commands}->{connect} = sub {
+        my ($statement, @parameters) = @_;
+        my @connect_options = $statement =~ m/(?:^|,)(\"(?:[^\"]+|\"\")*\"|[^,]*)/g;
+        $connect_options[1] = '' if $connect_options[1] eq '-';
+        $connect_options[2] = '' if $connect_options[2] eq '-';
+        if ($connect_options[3]) {
+            $connect_options[3] = join ",", splice @connect_options, 3;
+            $connect_options[3] = eval "$connect_options[3]";
+            $self->{dbix} = DBIx::Simple->connect(@connect_options)
+            or die DBIx::Simple->error;
+        }
+        else {
+            die $self->_error('Invalid database connection.');
+        }
+    };
     
     #! capture: stores the resultset for later usage
     $self->{commands}->{capture} = sub {
@@ -406,6 +459,18 @@ sub _processor {
 
 sub _parse_parameters {
     my ($self, @parameters) = @_;
+    # process constants
+    if ($self->{constants}) {
+        if (ref($self->{constants}) eq "ARRAY") {
+            unshift @parameters, @{$self->{constants}};
+        }
+        if (ref($self->{constants}) eq "HASH") {
+            while (my($key, $val) = each (%{$self->{constants}})) {
+                $self->{processing}->{custom_parameters}->{$key} = $val;
+            }
+        }
+    }
+    # normal operation
     for (my $i=0; $i < @parameters; $i++) {
         my $param = $parameters[$i];
         if (ref($param) eq "HASH") {

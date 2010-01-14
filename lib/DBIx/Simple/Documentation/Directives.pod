@@ -22,6 +22,15 @@ Multiple commands can be used in a single sql file. Multi-line commands are supp
 
 The following is a list of available directive, their usage and syntax:
 
+=head3 connect
+
+     ! connect:
+          This command creates or replaces the database connection using a
+          typical DBI connection string seperated by comma. A blank username or 
+          password field should be denoted with a single dash `-`.
+     e.g.
+     ! connect dbi:mysql:test:localhost, user, pass, { RaiseError => 1, PrintError => 2 }
+
 =head3 execute
         
      ! execute:
@@ -158,7 +167,6 @@ The following is a list of available directive, their usage and syntax:
           
      e.g.
      ! setname foo
-
 
 
 

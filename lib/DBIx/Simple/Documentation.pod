@@ -19,8 +19,14 @@ in text files to be parsed and executed sequentially hence the idea of
 "simple-batch" processing.
 
     use DBIx::Simple::Batch;
+
     my  $db = DBIx::Simple::Batch->new($dir, 'dbi:mysql:movabletype', 'root');
     $db->call->sqlfile(@parameters);
+
+    my @data = $db->rs('resultset');
+    foreach my $row (@data) {
+        print "$row->{column}\n";
+    }
 
 =head2 THE SQL FILE
 
