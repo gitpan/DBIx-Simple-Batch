@@ -3,6 +3,8 @@ package DBIx::Simple::Batch;
 use warnings;
 use strict;
 use DBIx::Simple;
+use SQL::Abstract;
+use SQL::Interp ':all';
 use File::Find;
 
 =head1 NAME
@@ -11,7 +13,7 @@ DBIx::Simple::Batch - An Alternative To ORM and SQL Stored Procedures.
 
 =head1 VERSION
 
-Version 1.67
+Version 1.68
 
 =head1 DOCUMENTATION
 
@@ -25,7 +27,7 @@ Version 1.67
 
 =cut
 
-our $VERSION = '1.67';
+our $VERSION = '1.68';
 our @properties = caller();
 
 =head1 METHODS
@@ -54,7 +56,13 @@ new B<usage and syntax>
         2nd argument           - required
             @connection_string - display help for a specific command
             
-    example:
+    # Simple Example:
+    my $db = DBIx::Simple::Batch->new($path, @connection_string);
+    $db->call->folder->file(@parameters);
+    
+    ---
+    
+    # Got It? Now lets look at that again in slow-motion
     my $path = '/var/www/app/queries';
     my @connection_string = ('dbi:SQLite:/var/www/app/foo.db');
     my $db = DBIx::Simple::Batch->new($path, @connection_string);
@@ -63,7 +71,6 @@ new B<usage and syntax>
     my $path = '/var/www/app/queries/*.sql';
     my @connection_string = ('dbi:SQLite:/var/www/app/foo.db');
     my $db = DBIx::Simple::Batch->new($path, @connection_string);
-    # now you can
     $db->call->folder->file(...);
 
 =cut
@@ -84,7 +91,7 @@ sub new {
     
     ($path, $file_pattern) = $path =~ m/([^\*]+)(\*\.[\w\*]+)?/;
     
-    unless (-d -r $path) {
+    unless (-d $path && -r $path) {
         die "The path specified '$path', " .
         "does not exist and/or is not accessible.";
     }
@@ -373,9 +380,36 @@ sub _load_commands {
 
 sub _execute_query {
     my ($self, $statement, @parameters) = @_;
-    my $resultset = $self->{dbix}->query( $statement, @parameters ) or
-        die $self->_error(undef, @parameters);
-    return $resultset;
+    if ($statement =~ /\$\%/) {
+        # find and replace any standard placeholders
+        my $dbh = $self->{dbix}->dbh;
+        if (@parameters) {
+            foreach my $param (@parameters) {
+                my $p = $dbh->quote($param);
+                $statement =~ s/\?/$p/;
+            }
+        }
+        
+        # process sql::interp style queries, *new*, experimental
+        my @params = $statement =~ /\$\%([a-z0-9A-Z\_\-]+)/g;
+        my @sql    = split /\,/, $statement;
+        foreach my $term (@sql) { $term =~ s/(^\s+|\s+$)//;
+            if ($term =~ /^\$\%([a-z0-9A-Z\_\-]+)$/) {
+                my $param = $self->{processing}->{custom_parameters}->{$1};
+                $term = ref($param) ? $param : \$param;
+            }
+        }
+        ($statement, @parameters) = sql_interp(@sql);
+        my $resultset = $self->{dbix}->query( $statement, @parameters ) or
+            die $self->_error(undef, @parameters);
+        return $resultset;
+        
+    }
+    else {
+        my $resultset = $self->{dbix}->query( $statement, @parameters ) or
+            die $self->_error(undef, @parameters);
+        return $resultset;
+    }
 }
 
 # The _error method is an internal method that dies with a standardized
@@ -384,16 +418,16 @@ sub _execute_query {
 sub _error {
     my ( $self, $message, @parameters ) = @_;
     my $error_message = ref($self)
-    . " - sql file $self->{file} processing failed execution, "
+    . " - sql file $self->{file} processing failed or is being examined,\n"
     . ($message || "database error") . ".";
     if (ref($self->{cmds}) eq "ARRAY") {
-        $error_message .= "Point of failure, of command number "
+        $error_message .= " \nPoint of failure, command number "
         . ( $self->{cursor} || '0' ) . " ["
         . ( $self->{cmds} ? $self->{cmds}->[ $self->{cursor} ]->{command} : '' )
         . "] "
         . (
         $self->{cmds}->[ $self->{cursor} ]->{statement}
-        ? ( "and statement ("
+        ? ( "and statement \n("
               . substr( $self->{cmds}->[ $self->{cursor} ]->{statement}, 0, 20 )
               . "...) " )
         : " "

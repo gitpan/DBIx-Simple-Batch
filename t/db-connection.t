@@ -8,7 +8,7 @@ BEGIN {
     eval { DBD::SQLite->VERSION >= 1 }
         or plan skip_all => 'DBD::SQLite >= 1.00 required';
 
-    plan tests => 7;
+    plan tests => 4;
     use_ok('FindBin');
     use_ok('DBIx::Simple');
     use_ok('DBIx::Simple::Batch');
@@ -22,12 +22,3 @@ my $db = DBIx::Simple::Batch->new($fs, @p);
 
 # connected
 ok($db, 'connection test');
-
-# read sql file queue
-ok($db->queue($fs.'tables/users/getall'), 'test sql file access');
-
-# processed queue
-ok($db->process_queue('this is a test'), 'process queue');
-
-# named resultset 
-is(ref($db->rs('group')), "ARRAY", "named resultset test");

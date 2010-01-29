@@ -20,11 +20,10 @@ in text files to be parsed and executed sequentially hence the idea of
 
     use DBIx::Simple::Batch;
 
-    my  $db = DBIx::Simple::Batch->new($dir, 'dbi:mysql:movabletype', 'root');
-    $db->call->sqlfile(@parameters);
+    my  $db = DBIx::Simple::Batch->new($dir, 'dbi:mysql:test', 'root');
+    $db->call->file(@parameters);
 
-    my @data = $db->rs('resultset');
-    foreach my $row (@data) {
+    foreach my $row (@{$db->rs('interesting')}) {
         print "$row->{column}\n";
     }
 
@@ -83,6 +82,11 @@ the sql file above.
     $db->clear;
     
     # the object-oriented way to process and retrieve results
+    # Note! this behavior is not activated unless the path passed to the `new`
+    # method ends in a valid file extension pattern, wildcards ok, or *.*
+    
+    my $dir = '/var/www/newapp/queries/*.*';
+    my $db  = DBIx::Simple::Batch->new($dir, 'dbi:mysql:movabletype', 'root');
     
     my $files = $db->files->get_all({id => 1})->rs('interesting');
     foreach my $file (@{$files}) {
@@ -93,6 +97,47 @@ the sql file above.
     
     # we just processed sql file /var/www/newapp/queries/files/get_all
     
+=head2 SQL FILE PARAMS
+
+Parameters can be passed to the sql file to create more complex queries. These
+parameters are defined and passed to the sql file accessor or
+process/process_queue function as follows:
+
+    # sql file accessor
+    $db->call->folder->file(@parameters);
+    
+    # process/process_queue function
+    $db->queue('folder/file');
+    $db->process_queue(@parameters)
+    
+    # parameters should be scalars or hashrefs when using standard queries
+    my @parameters = ('this', 'that', {'the_other' => 'and_then_some'});
+    
+    # SQL::Interp style sql statements are supported also. SQL::Interp
+    # parameters are hashrefs of hashrefs
+    my @parameters = ({
+        where => {
+            this => 'that',
+            more => 'less'
+        }
+    });
+    
+Parameters can be scalars, arrayrefs and/or hashrefs and are used in the sql
+file as follows (can be mixed). See L<SQL::Interp> for specifics on SQL::Interp
+style and syntax.
+
+    # passed-in scalars
+    ! execute select * from foo where id = $0 and bar = $1
+    
+    # passed-in hashref
+    ! execute select * from foo where id = $!this and bar = $!that
+    
+    # sql::interp syntax
+    ! execute select * from foo, $%where
+    
+    # sql::interp syntax with mix-in
+    ! execute select * from foo, $%where, and id = $!id
+
 =head2 SQL FILE LOGIC
 
 The logical capabilities of an sql file are far from that of a scripting
@@ -104,7 +149,7 @@ directives and strategies.
     # insert some stuff and return the insert id
     ! setting blank as null
     ! execute insert into `foo` (id, name, created) values ($!id, $!name, $!created)
-    }
+    
     # id and created variables that are blank and set to null
     ! setname new_user
     ! capture select max(id), name, email, created from `foo`
@@ -149,8 +194,6 @@ NOTE! When using the forward and/or process commands, please be aware that
 they both take a command line index which means that if your not careful
 when you update the sql file at a later date, you could be shifting the
 index which means your sql file will execute but not as you intended.
-
-
 
 =head1 OTHER DOCUMENTATION
 

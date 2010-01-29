@@ -31,3 +31,8 @@ Revision history for DBIx-Simple-Batch (formerly DBIx::Simple::Procedure)
         Fixed error output
         Added named resultsets
         Started DBIx::Simple::Batch
+1.68    Fri Jan 29 14:06:18 2010
+        Fixed stacked filetest ops issue (5.8.x compatibility)
+        Add ability to parse SQL::Interp style queries
+        Fixed custom error message
+        Updated POD
