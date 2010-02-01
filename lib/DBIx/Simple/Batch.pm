@@ -5,7 +5,7 @@ use strict;
 use DBIx::Simple;
 use SQL::Abstract;
 use SQL::Interp ':all';
-use File::Find;
+use File::Find::Object;
 
 =head1 NAME
 
@@ -13,7 +13,7 @@ DBIx::Simple::Batch - An Alternative To ORM and SQL Stored Procedures.
 
 =head1 VERSION
 
-Version 1.68
+Version 1.69
 
 =head1 DOCUMENTATION
 
@@ -27,7 +27,7 @@ Version 1.68
 
 =cut
 
-our $VERSION = '1.68';
+our $VERSION = '1.69';
 our @properties = caller();
 
 =head1 METHODS
@@ -78,11 +78,14 @@ new B<usage and syntax>
 sub new {
     my ($class, $path, @connect_options) = @_;
     
-    my $self = {};
-    my $file_pattern = '';
+    my $self           = {};
+    my $file_pattern   = '';
     bless $self, $class;
+    
     $self->{set_names} = {};
-    $self->{sets} = [];
+    $self->{sets}      = [];
+    $self->{map_key}  .= (@{['A'..'Z',0..9]})[rand(36)]
+        for (1..5);
     
     if (@connect_options) {
         $self->{dbix} = DBIx::Simple->connect(@connect_options)
@@ -101,63 +104,144 @@ sub new {
     
     # turn-on object mapping
     if ($self->{file_pattern}) {
-        our @package = ("package DBIx::Simple::Batch::Map;\n");
-        our $package_switch = 0;
-        our $new_routine = 'sub new {my $class = shift;my $base  = shift;my $self = {};$self->{base} = $base;bless $self, $class;return $self;}';
-        our $has_folder = 0;
-        find sub {
-            my $file      = $_;
-            my $file_path = $File::Find::name;
-            my $directory = $File::Find::dir;
-            my $namespace = 'DBIx::Simple::Batch::Map::';
-            
-            # specify package
-            if (-d $file_path) {
-                my $package_name = $file_path;
-                my $prune = $path; $prune =~ s/[\\\/]+$//;
-                $package_name =~ s/^$prune([\\\/])?//;
-                if ($package_name) {
-                    $package_name =~ s/[\\\/]/::/g;
-                    $package_name =~ s/[^:a-zA-Z0-9]/\_/g;
-                    push @package, "$new_routine\n";
-                    my $fqns = "$namespace$package_name";
-                    my $instantiator = "$fqns"."->new(". 'shift->{base}' .")";
-                    my $sub = $package_name; $sub =~ s/.*::([^:]+)$/$1/;
-                    push @package, "sub $sub { return $instantiator }\n" . "package $fqns;\n";
-                    $package_switch = 1;
-                    $has_folder = 1;
-                }
-            }
-            elsif (-f $file_path) {
-                my $pat = $self->{file_pattern};
-                if ($pat) {
-                    $pat =~ s/^\*\.([\*\w]+)/\.\*\.$1/;
-                }
-                else {
-                    $pat = '.*';
-                }
-                if ($file =~ /$pat/) {
-                    my $name = $file;
-                    $name =~ s/\.\w+$//g;
-                    $name =~ s/\W/\_/g;
-                    push(@package, "$new_routine\n") if $package_switch == 1;
-                    #
-                    $package_switch = 0;
-                    push @package, "sub $name ". '{ my $db = shift->{base}; return $db->queue(\''. $file_path .'\')->process(@_); }' ."\n";
-                }
-            }
-            else {
-                push @package, "$file -> ???\n";
-            }
-            
-        }, $self->{path};
-        # ugly no folders hack, this whole instantiation should be rewritten
-        unless ($has_folder){
-            my $package_name = shift(@package);
-            unshift @package, $package_name, $new_routine;
+        #no warnings 'redefine';
+        #our @package = ("package DBIx::Simple::Batch::Map::$self->{map_key};\n");
+        #our $package_switch = 0;
+        #our $new_routine = 'sub new {my $class = shift;my $base  = shift;my $self = {};$self->{base} = $base;bless $self, $class;return $self;}';
+        #our $has_folder = 0;
+        #find sub {
+        #    my $file      = $_;
+        #    my $file_path = $File::Find::name;
+        #    my $directory = $File::Find::dir;
+        #    my $namespace = 'DBIx::Simple::Batch::Map::' . $self->{map_key} . '::';
+        #    
+        #    # specify package
+        #    if (-d $file_path) {
+        #        my $package_name = $file_path;
+        #        my $prune = $path; $prune =~ s/[\\\/]+$//;
+        #        $package_name =~ s/^$prune([\\\/])?//;
+        #        if ($package_name) {
+        #            $package_name =~ s/[\\\/]/::/g;
+        #            $package_name =~ s/[^:a-zA-Z0-9]/\_/g;
+        #            push @package, "$new_routine\n";
+        #            my $fqns = "$namespace$package_name";
+        #            my $instantiator = "$fqns"."->new(". 'shift->{base}' .")";
+        #            my $sub = $package_name; $sub =~ s/.*::([^:]+)$/$1/;
+        #            push @package, "sub $sub { return $instantiator }\n" . "package $fqns;\n";
+        #            $package_switch = 1;
+        #            $has_folder = 1;
+        #        }
+        #    }
+        #    elsif (-f $file_path) {
+        #        my $pat = $self->{file_pattern};
+        #        if ($pat) {
+        #            $pat =~ s/^\*\.([\*\w]+)/\.\*\.$1/;
+        #        }
+        #        else {
+        #            $pat = '.*';
+        #        }
+        #        if ($file =~ /$pat/) {
+        #            my $name = $file;
+        #            $name =~ s/\.\w+$//g;
+        #            $name =~ s/\W/\_/g;
+        #            push(@package, "$new_routine\n") if $package_switch == 1;
+        #            #
+        #            $package_switch = 0;
+        #            push @package, "sub $name ". '{ my $db = shift->{base}; return $db->queue(\''. $file_path .'\')->process(@_); }' ."\n";
+        #        }
+        #    }
+        #    else {
+        #        push @package, "$file -> ???\n";
+        #    }
+        #    
+        #}, $self->{path};
+        ## ugly no folders hack, this whole instantiation should be rewritten
+        #unless ($has_folder){
+        #    my $package_name = shift(@package);
+        #    unshift @package, $package_name, $new_routine;
+        #}
+        my $package  = "DBIx::Simple::Batch::Map::$self->{map_key}";
+        my @objects  = ();
+        my $tree     = File::Find::Object->new({}, ($path));
+        while (my $o = $tree->next()) {
+            push @objects, $o;
         }
-        eval "@package";
-            die "Error mapping sql file objects: $@" if $@;
+        # Build folder objects
+        foreach my $object (@objects) {
+            if (-d $object && -r $object) {
+                my $base_path     = $objects[0];
+                my $base_path_re  = $base_path;
+                   $base_path_re  =~ s/(\W)/\\$1/g;
+                my $this_path     = $object;
+                my $rel_path      = $this_path;
+                   $rel_path      =~ s/^$base_path_re//;
+                   
+                if ($rel_path) {
+                    my $namespace = $rel_path;
+                       $namespace =~ s/[\\\/]/::/g;
+                    
+                    # Build packages
+                    eval "package $package$namespace"; die $@ if $@;
+                    eval "sub $package$namespace" . '::new {
+                        my $class = shift;
+                        my $base  = shift;
+                        my $self  = {};
+                           $self->{base} = $base;
+                        bless $self, $class;
+                        return $self;
+                    }'; die $@ if $@;
+                    
+                    # Build pointers
+                    eval "sub $package$namespace"  . ' {
+                        return ' . "$package$namespace" . '->new(shift->{base});
+                    }';  die $@ if $@;
+                    
+                }
+            }
+        }
+        eval "package $package"; die $@ if $@;
+        eval "sub $package" . '::new {
+            my $class = shift;
+            my $base  = shift;
+            my $self  = {};
+               $self->{base} = $base;
+            bless $self, $class;
+            return $self;
+        }'; die $@ if $@;
+        # Build file objects
+        foreach my $object (@objects) {
+            if (-f $object && -r $object) {
+                my $base_path     = $objects[0];
+                my $base_path_re  = $base_path;
+                   $base_path_re  =~ s/(\W)/\\$1/g;
+                my $this_path     = $object;
+                my $rel_path      = $this_path;
+                   $rel_path      =~ s/^$base_path_re//;
+                   
+                if ($rel_path) {
+                    my @structure = split /[\\\/]/, $rel_path;
+                    my $filename  = $structure[$#structure];
+                    my $namespace = $rel_path;
+                       $namespace =~ s/[\\\/]/::/g;
+                    my $pat       = $self->{file_pattern};
+                    if ($pat) {
+                        $pat =~ s/^\*\.([\*\w]+)/\.\*\.$1/;
+                    }
+                    else {
+                        $pat = '.*';
+                    }
+                    if ($namespace =~ /$pat/) {
+                        $namespace =~ s/\.\w+$//g;
+                        $namespace =~ s/[^:a-zA-Z0-9]/\_/g;
+                    
+                        eval "sub $package$namespace" . ' {
+                            my $db = shift->{base};
+                            return $db->queue(\''. $this_path .'\')->process(@_);
+                        }'; die $@ if $@;
+                    }
+                }
+            }
+        }
     }
     
     # load directives
@@ -186,7 +270,10 @@ call B<usage and syntax>
 
 =cut
 
-sub call { return DBIx::Simple::Batch::Map->new(shift); }
+sub call {
+    my $self = shift;
+    return ("DBIx::Simple::Batch::Map::".$self->{map_key})->new($self);
+}
 
 =head2 constants
 

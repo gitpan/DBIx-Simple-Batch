@@ -1,4 +1,4 @@
-# mysql example
+# sqlite example
 ! setting blank as zero
 
 ! execute create table if not exists `group` (`id` integer primary key autoincrement, `info` varchar not null )
